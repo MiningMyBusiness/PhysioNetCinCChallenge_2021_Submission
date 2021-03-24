@@ -4,18 +4,25 @@ import pandas as pd
 
 class Encode_Shape:
     
-    def __init__(self, encoder_object, chunk_arrs, leads, chunk_labels=None):
+    def __init__(self, encoder_object, chunk_arrs, leads, chunk_labels=None, test=False):
         self._twelve_leads = ('I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6')
+        self._six_leads = ('I', 'II', 'III', 'aVR', 'aVL', 'aVF')
+        self._three_leads = ('I', 'II', 'V2')
+        self._two_leads = ('II', 'V5')
         self._leads = leads
         self._encoder = encoder_object
         self._chunk_arrs = chunk_arrs
         self._chunk_labels = chunk_labels
         self.create_label_map()
-        self.remove_leads()
+        if not test:
+            self.remove_leads()
         
         
     def remove_leads(self):
-        feature_indices = np.array([self._twelve_leads.index(lead) for lead in self._leads] + [12, 13])
+        last_idx = self._chunk_arrs[0].shape[1] - 1
+        sec_last_idx = last_idx - 1
+        feature_indices = np.array([self._twelve_leads.index(lead) for lead in self._leads] + [sec_last_idx, 
+                                                                                               last_idx])
         new_chunk_arrs = [None]*len(self._chunk_arrs)
         for i,chunk in enumerate(self._chunk_arrs):
             new_chunk_arrs[i] = chunk[:, feature_indices]

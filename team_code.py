@@ -10,6 +10,7 @@ from slice_dice import Slice_Dice
 from Train_Autoencoder import The_Autoencoder
 from Encode_Shape import Encode_Shape
 from sklearn.neighbors import KNeighborsClassifier
+from OVR_DNN import OVR_DNN
 import pickle
 
 twelve_lead_model_filename = '12_lead_model.pickle'
@@ -95,10 +96,8 @@ def training_code(data_directory, model_directory):
     print('  found features of shape:', features.shape)
     print('  found labels of shape:', labels.shape)
 
-    clf_knn = KNeighborsClassifier(n_neighbors=20, weights='distance',
-                              n_jobs=-1)
-    clf_knn = clf_knn.fit(features, labels)
-    save_model(filename, shaper, clf_knn, leads)
+    my_ovr = OVR_DNN(X_train=features, y_train=labels)
+    save_model(filename, shaper, my_ovr, leads)
 
     # Train 6-lead ECG model.
     print('Training 6-lead ECG model...')
@@ -112,10 +111,8 @@ def training_code(data_directory, model_directory):
     print('  found features of shape:', features.shape)
     print('  found labels of shape:', labels.shape)
 
-    clf_knn = KNeighborsClassifier(n_neighbors=20, weights='distance',
-                              n_jobs=-1)
-    clf_knn = clf_knn.fit(features, labels)
-    save_model(filename, shaper, clf_knn, leads)
+    my_ovr = OVR_DNN(X_train=features, y_train=labels)
+    save_model(filename, shaper, my_ovr, leads)
 
     # Train 3-lead ECG model.
     print('Training 3-lead ECG model...')
@@ -129,10 +126,8 @@ def training_code(data_directory, model_directory):
     print('  found features of shape:', features.shape)
     print('  found labels of shape:', labels.shape)
 
-    clf_knn = KNeighborsClassifier(n_neighbors=20, weights='distance',
-                              n_jobs=-1)
-    clf_knn = clf_knn.fit(features, labels)
-    save_model(filename, shaper, clf_knn, leads)
+    my_ovr = OVR_DNN(X_train=features, y_train=labels)
+    save_model(filename, shaper, my_ovr, leads)
 
     # Train 2-lead ECG model.
     print('Training 2-lead ECG model...')
@@ -146,10 +141,8 @@ def training_code(data_directory, model_directory):
     print('  found features of shape:', features.shape)
     print('  found labels of shape:', labels.shape)
 
-    clf_knn = KNeighborsClassifier(n_neighbors=20, weights='distance',
-                              n_jobs=-1)
-    clf_knn = clf_knn.fit(features, labels)
-    save_model(filename, shaper, clf_knn, leads)
+    my_ovr = OVR_DNN(X_train=features, y_train=labels)
+    save_model(filename, shaper, my_ovr, leads)
 
 ################################################################################
 #
@@ -158,14 +151,15 @@ def training_code(data_directory, model_directory):
 ################################################################################
 
 # Save your trained models.
-def save_model(filename, shaper_object, classifier, leads):
+def save_model(filename, shaper_object, my_ovr, leads):
     # save encoder
     filename_tf = filename.split('.pick')[0] + '_encoder.h5'
     shaper_object._encoder._encoder.save(filename_tf)
-    # save classifier and leads
+    # save ovr model files
+    my_ovr.save_models(filename)
+    # save leads
     model_dict = {
         'leads': leads,
-        'classifier': classifier
     }
     with open(filename, 'wb') as handle:
         pickle.dump(model_dict, handle)
@@ -197,13 +191,16 @@ def load_model(filename):
     # load encoder
     filename_tf = filename.split('.pick')[0] + '_encoder.h5'
     encoder_object = The_Autoencoder(encoder_filename=filename_tf)
+    # load ovr models
+    my_ovr = OVR_DNN(filename=filename)
+    # load leads
     with open(filename, 'rb') as handle:
         saved_dict = pickle.load(handle)
     handle.close()
     model_dict = {
         'encoder': encoder_object,
         'leads': saved_dict['leads'],
-        'classifier': saved_dict['classifier']
+        'classifier': my_ovr
     }
     return model_dict
 
@@ -238,7 +235,7 @@ def run_model(model, header, recording):
     # Load features
     desire_rate = 50 #Hz, desired sampling rate
     time_window = 5 #sec, window of time of ekg to look in
-    overlap = 0.9 # proportion of overlap between time windows
+    overlap = 0.95 # proportion of overlap between time windows
     this_recording = recording.T
     this_freq = get_frequency(header)
     slicer = Slice_Dice(this_recording, this_freq)
@@ -246,18 +243,13 @@ def run_model(model, header, recording):
                                        time_window, 
                                        overlap, 
                                        header)
-    shaper = Encode_Shape(my_encoder, chunks, leads)
+    shaper = Encode_Shape(my_encoder, chunks, leads, test=True)
     features = shaper.get_shaped_output()
 
     # Predict labels and probabilities
-    probabilities_many = classifier.predict_proba(features)
-    probabilities = np.zeros(len(probabilities_many))
-    for i,probs in enumerate(probabilities_many):
-        print(probs.shape)
-        mean_probs = np.mean(probs, axis=0)
-        if len(mean_probs) > 1:
-            probabilities[i] = mean_probs[1]
-    print(np.round(probabilities, 2))
+    many_predicts = classifier.predict(features)
+    probabilities = np.mean(many_predicts, axis=0)
+    print(probabilities)
     
     labels = np.zeros(len(probabilities)).astype(np.int)
     labels[probabilities >= 0.5] = 1
